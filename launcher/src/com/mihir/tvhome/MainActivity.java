@@ -3,6 +3,7 @@ package com.mihir.tvhome;
 import android.animation.ArgbEvaluator;
 import android.animation.ValueAnimator;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -23,6 +24,7 @@ import android.media.tv.TvContract;
 import android.media.tv.TvInputInfo;
 import android.media.tv.TvInputManager;
 import android.net.wifi.WifiManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -98,14 +100,14 @@ public class MainActivity extends Activity {
     private ValueAnimator glowAnim;
     private int lastFocusedId = View.NO_ID;
     private boolean firstShow = true;
-    private int packageSeq;
+    private String appSignature;
     private PopupWindow inputsPopup;
 
     private final BroadcastReceiver tick = new BroadcastReceiver() {
         @Override public void onReceive(Context c, Intent i) { updateClock(); updateWifi(); }
     };
     private final BroadcastReceiver packages = new BroadcastReceiver() {
-        @Override public void onReceive(Context c, Intent i) { buildApps(); }
+        @Override public void onReceive(Context c, Intent i) { appSignature = null; colorCache.clear(); buildApps(); }
     };
 
     // ---------------------------------------------------------------- lifecycle
@@ -147,7 +149,7 @@ public class MainActivity extends Activity {
         if (last == null && !dockCards.isEmpty()) last = dockCards.get(0);
         if (last != null) last.requestFocus();
         // Catch installs/removals that happened while another app was in front.
-        if (getPackageManager().getChangedPackages(packageSeq) != null) buildApps();
+        buildApps();
         if (firstShow) { firstShow = false; playEntrance(); }
         // New photo on return if the current one has been up for the full interval.
         if (wallIndex < 0 || SystemClock.elapsedRealtime() - wallChangedAt >= WALLPAPER_INTERVAL_MS) nextWallpaper();
@@ -238,7 +240,8 @@ public class MainActivity extends Activity {
         hero.addView(bottom, lp(-1, -2, Gravity.BOTTOM, dp(48), 0, dp(48), dp(30)));
 
         title = text(34, "sans-serif-light", Color.WHITE);
-        title.setShadowLayer(dp(18), 0, 0, 0x66000000);
+        // TCL API 22 RenderThread crashes in libRScpp when rebuilding blurred text.
+        if (Build.VERSION.SDK_INT > 22) title.setShadowLayer(dp(18), 0, 0, 0x66000000);
         title.setSingleLine(true);
         bottom.addView(title, new LinearLayout.LayoutParams(-2, -2));
         ((LinearLayout.LayoutParams) title.getLayoutParams()).setMargins(dp(8), 0, 0, dp(14));
@@ -257,7 +260,7 @@ public class MainActivity extends Activity {
         bottom.addView(dockRow, new LinearLayout.LayoutParams(-1, -2));
 
         appsLabel = text(11, "sans-serif-medium", 0x99FFFFFF);
-        appsLabel.setText("ALL APPS");
+        appsLabel.setText(R.string.all_apps);
         appsLabel.setLetterSpacing(0.22f);
         content.addView(appsLabel, llp(-2, -2, dp(68), dp(8), 0, dp(18)));
 
@@ -295,19 +298,22 @@ public class MainActivity extends Activity {
         date.setPadding(0, 0, dp(16), 0); // letterSpacing is not counted in the measured width
         date.setLetterSpacing(0.22f);
         left.addView(date);
-        for (TextView t : new TextView[]{greeting, clock, ampm, date}) t.setShadowLayer(dp(10), 0, dp(1), 0xB3000000);
+        if (Build.VERSION.SDK_INT > 22)
+            for (TextView t : new TextView[]{greeting, clock, ampm, date}) t.setShadowLayer(dp(10), 0, dp(1), 0xB3000000);
         header.addView(left, new FrameLayout.LayoutParams(dp(420), -2, Gravity.START | Gravity.TOP));
 
         LinearLayout right = new LinearLayout(this);
         right.setGravity(Gravity.CENTER_VERTICAL);
         right.setClipChildren(false);
-        TextView inputs = pill("Inputs", "⇥");
+        TextView inputs = pill(getString(R.string.inputs), "⇥");
         inputs.setOnClickListener(v -> showInputs(v));
         wifiPill = pill("Wi-Fi", "◉");
-        wifiPill.setOnClickListener(v -> launch(new Intent(Settings.ACTION_WIFI_SETTINGS)));
-        TextView settings = pill("Settings", "⚙");
-        settings.setOnClickListener(v -> launch(new Intent(Settings.ACTION_SETTINGS)));
-        for (TextView p : new TextView[]{inputs, wifiPill, settings}) {
+        wifiPill.setOnClickListener(v -> openSettings(Settings.ACTION_WIFI_SETTINGS));
+        TextView settings = pill(getString(R.string.settings), "≡");
+        settings.setOnClickListener(v -> openSettings(Settings.ACTION_SETTINGS));
+        TextView homeMode = pill(getString(R.string.home_mode), "⌂");
+        homeMode.setOnClickListener(v -> showHomeMode());
+        for (TextView p : new TextView[]{inputs, wifiPill, settings, homeMode}) {
             right.addView(p, llp(-2, dp(30), dp(10), 0, 0, 0));
             pills.add(p);
         }
@@ -341,11 +347,23 @@ public class MainActivity extends Activity {
 
     private void buildApps() {
         PackageManager pm = getPackageManager();
-        android.content.pm.ChangedPackages changed = pm.getChangedPackages(packageSeq);
-        if (changed != null) packageSeq = changed.getSequenceNumber();
-        Intent q = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER);
+        // Prefer TV entry points; domestic TCL apps often only expose LAUNCHER.
+        List<ResolveInfo> entries = new ArrayList<>(pm.queryIntentActivities(
+                new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER), 0));
+        entries.addAll(pm.queryIntentActivities(
+                new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0));
+        List<String> signature = new ArrayList<>();
+        for (ResolveInfo ri : entries) signature.add(ri.activityInfo.packageName + "/"
+                + ri.activityInfo.name + ":" + ri.loadLabel(pm));
+        Collections.sort(signature);
+        String currentSignature = signature.toString();
+        if (currentSignature.equals(appSignature)) return;
+        appSignature = currentSignature;
+        View focused = getCurrentFocus();
+        String focusedPackage = focused != null && focused.getTag() instanceof App
+                ? ((App) focused.getTag()).pkg : null;
         Map<String, App> byPkg = new HashMap<>();
-        for (ResolveInfo ri : pm.queryIntentActivities(q, 0)) {
+        for (ResolveInfo ri : entries) {
             ActivityInfo ai = ri.activityInfo;
             if (hidden.contains(ai.packageName) || byPkg.containsKey(ai.packageName)) continue;
             App a = new App();
@@ -364,6 +382,8 @@ public class MainActivity extends Activity {
         for (String p : dockApps) if (byPkg.containsKey(p)) dock.add(byPkg.remove(p));
         List<App> rest = new ArrayList<>(byPkg.values());
         Collections.sort(rest, (x, y) -> x.label.compareToIgnoreCase(y.label));
+        // Keep the first screen useful even when none of the configured apps are installed.
+        if (dock.isEmpty()) while (!rest.isEmpty() && dock.size() < cols) dock.add(rest.remove(0));
 
         dockRow.removeAllViews();
         grid.removeAllViews();
@@ -400,9 +420,16 @@ public class MainActivity extends Activity {
         wireFocus();
 
         if (!dock.isEmpty()) { title.setText(dock.get(0).label); setGlow(dock.get(0).color); }
+        List<View> cards = new ArrayList<>(dockCards);
+        cards.addAll(gridCards);
+        for (View card : cards) if (((App) card.getTag()).pkg.equals(focusedPackage)) {
+            card.requestFocus();
+            return;
+        }
         View last = lastFocusedId == View.NO_ID ? null : findViewById(lastFocusedId);
-        if (last != null) last.requestFocus();
+        if (focusedPackage == null && last != null) last.requestFocus();
         else if (!dockCards.isEmpty()) dockCards.get(0).requestFocus();
+        else if (!pills.isEmpty()) pills.get(0).requestFocus();
     }
 
     /** A 16:9 card with the app's banner; the name shows under it while focused. */
@@ -464,7 +491,7 @@ public class MainActivity extends Activity {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)));
         card.setOnFocusChangeListener((v, has) -> {
             float s = has ? (inDock ? 1.12f : 1.1f) : 1f;
-            v.animate().scaleX(s).scaleY(s).translationZ(has ? dp(14) : 0)
+            v.animate().scaleX(s).scaleY(s).translationZ(Build.VERSION.SDK_INT <= 22 ? 0 : has ? dp(14) : 0)
                     .setInterpolator(has ? new OvershootInterpolator(1.8f) : new DecelerateInterpolator())
                     .setDuration(has ? 320 : 200).start();
             shine.animate().alpha(has ? 1f : 0f).setDuration(160).start();
@@ -550,8 +577,14 @@ public class MainActivity extends Activity {
 
         TvInputManager tim = (TvInputManager) getSystemService(TV_INPUT_SERVICE);
         List<TvInputInfo> inputs = new ArrayList<>();
-        if (tim != null) for (TvInputInfo t : tim.getTvInputList()) {
-            if (t.isPassthroughInput() && !t.isHidden(this)) inputs.add(t);
+        try {
+            // Domestic TCL returns a manager even when its backing system service is absent.
+            List<TvInputInfo> available = tim == null ? null : tim.getTvInputList();
+            if (available != null) for (TvInputInfo t : available) {
+                if (t.isPassthroughInput() && (Build.VERSION.SDK_INT < 24 || !t.isHidden(this))) inputs.add(t);
+            }
+        } catch (RuntimeException unsupportedVendorService) {
+            inputs.clear(); // Keep the vendor source picker available.
         }
         Collections.sort(inputs, (x, y) -> inputLabel(x).compareToIgnoreCase(inputLabel(y)));
         for (TvInputInfo t : inputs) {
@@ -561,10 +594,10 @@ public class MainActivity extends Activity {
                 if (!launch(i)) openPackage(inputPickerPkg);
             }));
         }
-        if (isInstalled(liveTvPkg)) rows.add(inputRow("Live TV", () -> openPackage(liveTvPkg)));
-        if (inputs.isEmpty() && isInstalled(inputPickerPkg)) rows.add(inputRow("All sources…", () -> openPackage(inputPickerPkg)));
+        if (isInstalled(liveTvPkg)) rows.add(inputRow(getString(R.string.live_tv), () -> openPackage(liveTvPkg)));
+        if (inputs.isEmpty() && isInstalled(inputPickerPkg)) rows.add(inputRow(getString(R.string.all_sources), () -> openPackage(inputPickerPkg)));
 
-        if (rows.isEmpty()) rows.add(inputRow("Settings", () -> launch(new Intent(Settings.ACTION_SETTINGS))));
+        if (rows.isEmpty()) rows.add(inputRow(getString(R.string.settings), () -> openSettings(Settings.ACTION_SETTINGS)));
         for (TextView r : rows) {
             r.setOnClickListener(v -> { pw.dismiss(); ((Runnable) v.getTag()).run(); });
             list.addView(r, new LinearLayout.LayoutParams(-1, dp(36)));
@@ -577,7 +610,7 @@ public class MainActivity extends Activity {
             r.setNextFocusRightId(r.getId());
         }
         pw.setOutsideTouchable(true);
-        pw.setElevation(dp(16));
+        if (Build.VERSION.SDK_INT > 22) pw.setElevation(dp(16));
         pw.setOnDismissListener(() -> { inputsPopup = null; anchor.requestFocus(); });
         inputsPopup = pw;
         pw.showAsDropDown(anchor, 0, dp(8), Gravity.START);
@@ -585,7 +618,7 @@ public class MainActivity extends Activity {
     }
 
     private String inputLabel(TvInputInfo t) {
-        CharSequence c = t.loadCustomLabel(this);
+        CharSequence c = Build.VERSION.SDK_INT >= 24 ? t.loadCustomLabel(this) : null;
         if (c == null || c.length() == 0) c = t.loadLabel(this);
         return String.valueOf(c);
     }
@@ -614,11 +647,11 @@ public class MainActivity extends Activity {
     private void updateClock() {
         Calendar now = Calendar.getInstance();
         int h = now.get(Calendar.HOUR_OF_DAY);
-        greeting.setText(h < 5 ? "GOOD NIGHT" : h < 12 ? "GOOD MORNING" : h < 17 ? "GOOD AFTERNOON" : "GOOD EVENING");
+        greeting.setText(h < 5 ? R.string.night : h < 12 ? R.string.morning : h < 17 ? R.string.afternoon : R.string.evening);
         boolean is24 = android.text.format.DateFormat.is24HourFormat(this);
         clock.setText(new SimpleDateFormat(is24 ? "H:mm" : "h:mm", Locale.getDefault()).format(now.getTime()));
         ampm.setText(is24 ? "" : (h < 12 ? "AM" : "PM"));
-        date.setText(new SimpleDateFormat("EEEE  d MMMM", Locale.getDefault()).format(now.getTime()).toUpperCase(Locale.getDefault()));
+        date.setText(new SimpleDateFormat(getString(R.string.date_pattern), Locale.getDefault()).format(now.getTime()).toUpperCase(Locale.getDefault()));
     }
 
     private void updateWifi() {
@@ -628,7 +661,7 @@ public class MainActivity extends Activity {
             if (wm != null && wm.getConnectionInfo() != null) {
                 String s = wm.getConnectionInfo().getSSID();
                 if (s != null && !s.contains("unknown ssid")) name = s.replace("\"", "");
-                if (wm.getConnectionInfo().getNetworkId() == -1) name = "Offline";
+                if (wm.getConnectionInfo().getNetworkId() == -1) name = getString(R.string.offline);
             }
         } catch (SecurityException ignored) { }
         wifiPill.setText("◉  " + name);
@@ -785,9 +818,43 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void showHomeMode() {
+        new AlertDialog.Builder(this).setTitle(R.string.home_mode)
+                .setMessage(R.string.home_service_description)
+                .setPositiveButton(R.string.enable_home, (dialog, which) -> {
+                    getSharedPreferences("home_mode", MODE_PRIVATE).edit().putBoolean("enabled", true).apply();
+                    if (!HomeRedirectService.authorized(this)) openSettings(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+                })
+                .setNegativeButton(R.string.restore_home, (dialog, which) -> {
+                    getSharedPreferences("home_mode", MODE_PRIVATE).edit().putBoolean("enabled", false).apply();
+                    launch(new Intent().setComponent(new ComponentName("com.tcl.cyberui", "com.tcl.cyberui.MainActivity")));
+                }).setNeutralButton(android.R.string.cancel, null).show();
+    }
+
+    private void openSettings(String action) {
+        if (!launch(new Intent(action))) openPackage("com.tcl.settings");
+    }
+
     private void openPackage(String pkg) {
+        if (pkg == null || pkg.isEmpty()) return;
+        if ("com.tcl.sourcemananger".equals(pkg)) {
+            // Its MAIN activity exits without opening the menu on 55D6; the exported
+            // vendor service displays the actual source-picker overlay.
+            try {
+                ComponentName shown = startService(new Intent("com.tcl.insrc.SHOW_WINDOW")
+                        .setComponent(new ComponentName(pkg, "com.tcl.insrc.ShowWindowService")));
+                if (shown != null) return;
+            } catch (RuntimeException unavailableVendorService) { /* Try the activity below. */ }
+        }
         Intent i = getPackageManager().getLeanbackLaunchIntentForPackage(pkg);
         if (i == null) i = getPackageManager().getLaunchIntentForPackage(pkg);
+        // TCL's source picker can have a MAIN activity without a launcher category.
+        if (i == null && "com.tcl.sourcemananger".equals(pkg)) {
+            i = new Intent().setComponent(new ComponentName(pkg, "com.tcl.sourcemanager.MainActivity"));
+        }
+        if (i == null && "com.tcl.tv".equals(pkg)) {
+            i = new Intent("android.intent.action.TV").setPackage(pkg);
+        }
         if (i != null) launch(i);
     }
 

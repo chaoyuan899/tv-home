@@ -1,0 +1,17 @@
+<resources>
+    <string name="date_pattern">M月d日 EEEE</string>
+    <string name="all_apps">全部应用</string>
+    <string name="inputs">信源</string>
+    <string name="settings">设置</string>
+    <string name="live_tv">电视直播</string>
+    <string name="all_sources">全部信源…</string>
+    <string name="offline">未连接</string>
+    <string name="night">晚安</string>
+    <string name="morning">早上好</string>
+    <string name="afternoon">下午好</string>
+    <string name="evening">晚上好</string>
+    <string name="home_mode">桌面模式</string>
+    <string name="enable_home">启用 Home 返回</string>
+    <string name="restore_home">返回原厂桌面</string>
+    <string name="home_service_description">启用后，出现 TCL 原厂首页时会自动打开 TV Home。还需开启 TV Home 无障碍服务。服务只识别原厂桌面窗口，不读取屏幕内容，保留原厂桌面。</string>
+</resources>

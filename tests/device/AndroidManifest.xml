@@ -1,0 +1,4 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.mihir.tvhome.test">
+    <application android:label="TV Home device checks" />
+    <instrumentation android:name=".SmokeInstrumentation" android:targetPackage="com.mihir.tvhome" />
+</manifest>

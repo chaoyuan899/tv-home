@@ -1,0 +1,17 @@
+<resources>
+    <string name="date_pattern">EEEE  d MMMM</string>
+    <string name="all_apps">ALL APPS</string>
+    <string name="inputs">Inputs</string>
+    <string name="settings">Settings</string>
+    <string name="live_tv">Live TV</string>
+    <string name="all_sources">All sources…</string>
+    <string name="offline">Offline</string>
+    <string name="night">GOOD NIGHT</string>
+    <string name="morning">GOOD MORNING</string>
+    <string name="afternoon">GOOD AFTERNOON</string>
+    <string name="evening">GOOD EVENING</string>
+    <string name="home_mode">Home mode</string>
+    <string name="enable_home">Enable Home return</string>
+    <string name="restore_home">Use TCL Home</string>
+    <string name="home_service_description">When enabled, TV Home opens when the TCL home screen appears. Enable the TV Home accessibility service too. It observes only the TCL home window, cannot read screen content, and leaves the original launcher installed.</string>
+</resources>
