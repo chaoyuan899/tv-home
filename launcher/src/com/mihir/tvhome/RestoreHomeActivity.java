@@ -9,9 +9,20 @@ import android.os.Bundle;
 public final class RestoreHomeActivity extends Activity {
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
-        // Persist before launching stock Home so its window event cannot redirect back.
-        getSharedPreferences("home_mode", MODE_PRIVATE).edit().putBoolean("enabled", false).commit();
-        startActivity(new Intent().setComponent(new ComponentName("com.tcl.cyberui",
+        // An app may change its own HOME alias; TCL denies this operation to adb shell.
+        boolean enable = getIntent().getBooleanExtra("enable_home", false);
+        try {
+            getPackageManager().setComponentEnabledSetting(
+                new ComponentName(this, "com.mihir.tvhome.HomeActivity"),
+                enable ? android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+                        : android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                android.content.pm.PackageManager.DONT_KILL_APP);
+        } catch (IllegalArgumentException stagingInstall) {
+            // The ordinary bootstrap APK deliberately has no HOME alias. It can
+            // still return to stock, but cannot enable native Home before upgrade.
+            android.util.Log.w("TVHome", "Native Home entry is not installed", stagingInstall);
+        }
+        if (!enable) startActivity(new Intent().setComponent(new ComponentName("com.tcl.cyberui",
                 "com.tcl.cyberui.MainActivity")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         finish();
     }

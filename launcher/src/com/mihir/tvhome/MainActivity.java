@@ -819,14 +819,26 @@ public class MainActivity extends Activity {
     }
 
     private void showHomeMode() {
+        try {
+            getPackageManager().getActivityInfo(new ComponentName(this, "com.mihir.tvhome.HomeActivity"),
+                    PackageManager.GET_DISABLED_COMPONENTS);
+        } catch (PackageManager.NameNotFoundException stagingInstall) {
+            new AlertDialog.Builder(this).setMessage(R.string.finish_install)
+                    .setPositiveButton(android.R.string.ok, null).show();
+            return;
+        }
         new AlertDialog.Builder(this).setTitle(R.string.home_mode)
                 .setMessage(R.string.home_service_description)
                 .setPositiveButton(R.string.enable_home, (dialog, which) -> {
-                    getSharedPreferences("home_mode", MODE_PRIVATE).edit().putBoolean("enabled", true).apply();
-                    if (!HomeRedirectService.authorized(this)) openSettings(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+                    getPackageManager().setComponentEnabledSetting(
+                            new ComponentName(this, "com.mihir.tvhome.HomeActivity"),
+                            PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP);
+                    launch(new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME));
                 })
                 .setNegativeButton(R.string.restore_home, (dialog, which) -> {
-                    getSharedPreferences("home_mode", MODE_PRIVATE).edit().putBoolean("enabled", false).apply();
+                    getPackageManager().setComponentEnabledSetting(
+                            new ComponentName(this, "com.mihir.tvhome.HomeActivity"),
+                            PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP);
                     launch(new Intent().setComponent(new ComponentName("com.tcl.cyberui", "com.tcl.cyberui.MainActivity")));
                 }).setNeutralButton(android.R.string.cancel, null).show();
     }

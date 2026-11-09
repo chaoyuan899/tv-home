@@ -46,6 +46,8 @@ public final class SmokeInstrumentation extends Instrumentation {
     @Override public void onStart() {
         Bundle result = new Bundle();
         try {
+            // ADB taps leave global touch mode enabled; these checks model a D-pad remote.
+            setInTouchMode(false);
             Intent intent = new Intent().setClassName("com.mihir.tvhome", "com.mihir.tvhome.MainActivity")
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             activity = startActivitySync(intent);
@@ -69,7 +71,7 @@ public final class SmokeInstrumentation extends Instrumentation {
             onUi(() -> {
                 List<View> dock = (List<View>) field("dockCards");
                 View selected = dock.get(dock.size() - 1);
-                selected.requestFocus();
+                check(selected.requestFocus(), "Cannot enter remote-control focus; touchMode=" + selected.isInTouchMode());
                 call("buildApps");
                 check(activity.getCurrentFocus() == selected, "Unchanged app refresh lost focus");
                 Object app = selected.getTag();

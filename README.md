@@ -1,68 +1,55 @@
 # TV Home — TCL 55D6 / Android 5.1
 
-基于 [mihirgupta0900/tv-home](https://github.com/mihirgupta0900/tv-home) 的 TCL 55D6 适配分支。保留壁纸、时钟、应用 Dock 和遥控器操作，支持 Android 5.1.1（API 22）以及 TCL 国内版应用入口。后续再逐步评估 [tinulica/tv-home](https://github.com/tinulica/tv-home) 的扩展功能。
+基于 [mihirgupta0900/tv-home](https://github.com/mihirgupta0900/tv-home) 的 TCL 55D6 适配。保留壁纸、时钟、应用 Dock 和遥控器操作，支持 Android 5.1.1（API 22）及 TCL 国内版应用入口。后续再逐步加入 [tinulica/tv-home](https://github.com/tinulica/tv-home) 的功能。
 
-## 本分支的范围
+本分支改为**系统原生默认桌面**，替代上一版的无障碍跳转：系统进入首页时直接启动 TV Home，原厂桌面仍保留。没有无障碍服务、开机广播跳转或新增运行时依赖。普通/TV 应用去重显示，支持中文、TCL 设置与信源，以及旧版绘图兼容处理。
 
-- 原生 Java，无新增运行时依赖；最低 API 22。
-- 发现普通 LAUNCHER 和 LEANBACK 应用，同一应用只显示一次。
-- 配置的 Dock 应用未安装时，自动补入可用应用；刷新列表后保留焦点。
-- 中文界面、TCL 设置和信源入口。
-- 保留原厂桌面，通过可关闭的无障碍服务实现 Home 返回。默认关闭。
-- 不 root、不刷机、不卸载系统应用，不自动执行仓库原有的精简脚本。
+仅验证 **55D6 / V8-A962T04-LF1V117 / API 22**。不刷机、不 root、不覆盖系统签名。开机 TCL 标志及系统初始化仍然存在；开机广告属于独立的固件服务，详见[适配说明](docs/tcl55d6-direct-home.md)。
 
-**固件差异：**在实测的 55D6 / `V8-A962T04-LF1V117` 上，安装包含 `android.intent.category.HOME` 的 APK 会报 `INSTALL_PARSE_FAILED_INCONSISTENT_CERTIFICATES`。同一签名、移除 HOME 声明后可正常安装。因此本分支是普通应用，不依赖 `cmd package` 或 `pm set-home-activity`。
+## 备份与编译
 
-## 先备份
+先备份原桌面 `com.tcl.cyberui`、设置 `com.tcl.settings`、信源 `com.tcl.sourcemananger` 的 APK，以及包列表、禁用状态、系统设置。广告相关改动需另外保存广告服务 APK/ODEX、`/data/local/bootvideo` 和原包状态。校验文件哈希，并将备份、设备信息和签名密钥保存在自己的电脑，勿提交仓库。
 
-至少保留原桌面 `com.tcl.cyberui`、设置 `com.tcl.settings`、信源 `com.tcl.sourcemananger` 的 APK，以及 `pm list packages -f`、禁用包列表和 `settings list system/secure/global`。先用 `pm path 包名` 查询实际路径，再 pull APK；校验 ZIP 完整性和文件哈希。不要硬编码 `/data/app` 路径。
+这些是应用及设置回退备份，不是整机固件镜像，不包含私有应用数据、DRM 或固件分区。
 
-这是桌面回退备份，不是整机镜像，不能代替私有应用数据、DRM 或固件分区备份。备份、设备信息和密钥只保存在自己的电脑。
-
-## 编译与预览安装（macOS）
-
-需要 JDK 17、Android SDK platform 34、build-tools 35.0.0 和 platform-tools。可以通过 `JAVA_HOME`、`ANDROID_HOME`、`BUILD_TOOLS_VERSION` 覆盖路径。
+macOS 需要 JDK 17、Python 3、Android SDK platform 34、build-tools 35.0.0、platform-tools。支持 `JAVA_HOME`、`ANDROID_HOME`、`BUILD_TOOLS_VERSION` 环境变量。
 
 ```bash
 bash launcher/build-and-install.sh --build
-bash tests/check-apk.sh launcher/build/tvhome.apk
-# 先在电视上开启 ADB；将示例地址替换为电视的实际 IP
-export ADB_SERIAL=192.168.x.x:5555
-"$HOME/Library/Android/sdk/platform-tools/adb" connect "$ADB_SERIAL"
-bash launcher/build-and-install.sh --install
+bash tools/legacy-home/build.sh
+bash tests/run.sh
 ```
 
-默认只编译。`--install` 只安装并打开预览，不启用无障碍服务，不改变系统桌面或安装策略。输出 APK 在 `launcher/build/tvhome.apk`。本地签名文件为 `launcher/debug.keystore`，请私下保存；以后升级必须使用同一签名。
+生成 `launcher/build/tvhome.apk`、安装暂存用的 `tvhome-bootstrap.apk` 和 `launcher/build/legacy-home/tvhome-tools.jar`。保存私有 `launcher/debug.keystore`，以后升级必须使用同一签名。默认只编译，不操作电视。
 
-某些 TCL 固件会返回退出码 0，却输出 `install apk has be disabled`；脚本要求明确的 `Success` 才算安装成功。若遇到此限制，应先记录以下两项原值，再根据本机固件情况临时开启；装完恢复原值，原来为空的要恢复为空，不能统一设成 0：
+## 安装为系统首页
 
-```text
-persist.tcl.debug.installapk
-persist.tcl.installapk.enable
+开启电视 ADB，电脑与电视处于可互通的局域网。将地址替换成自己的电视 IP，备份目录必须是新目录：
+
+```bash
+"$HOME/Library/Android/sdk/platform-tools/adb" connect TV_IP:5555
+python3 tools/install-tcl-home.py --serial TV_IP:5555 \
+  --backup-dir /absolute/path/to/new-private-backup --select
 ```
 
-本分支实测临时设为 `1` 可安装。不同固件未保证适用，不需要因此恢复出厂或覆盖原厂签名。
+脚本检查固件，备份现有桌面 APK 和首页配置，校验备份后安装。首次安装先放入同签名普通应用，再升级为原生 HOME。临时修改 `sys.currentlauncher`、`persist.tcl.debug.installapk`、`persist.tcl.installapk.enable`，安装后恢复各自原值；设备必须明确返回 `Success`。选定首页后再核对系统默认组件。
 
-## 启用 Home 返回 / 回退
+省略 `--select` 可只升级而不主动重新选择首页；已有默认设置仍可能生效。安装原生 HOME 不是完全隔离的“预览模式”。连接中断导致恢复失败时，使用备份的 `properties.json` 恢复属性，空值应恢复为空字符串。
 
-先验证预览中的遥控器、应用、设置和信源。然后在右上角 **桌面模式 → 启用 Home 返回**，在系统无障碍设置中启用 **TV Home**。
+## 回退
 
-服务仅监听 `com.tcl.cyberui` 的窗口变化，只在 `com.tcl.cyberui.MainActivity` 出现时打开 TV Home；没有屏幕内容读取能力。原厂桌面始终保留，实测通过 ADB 按 Home 后约 3–5 秒返回，期间会显示原首页，不能消除固件开机广告。其他型号/组件名不会自动接管。
+- 电视上：**桌面模式 → 返回原厂桌面**，关闭本应用的 HOME 入口，保留两边应用及数据。
+- 电脑上：`bash tools/restore-tcl-home.sh TV_IP:5555`，验证原厂首页可用，关闭新入口并明确设回 TCL。原厂桌面可能按原设置打开上次信源。
+- 再次使用：打开应用列表中的 TV Home，选择 **桌面模式 → 使用 TV Home**。若出现系统选择框，选 TV Home 和“始终”。也可重新执行安装脚本的 `--select`。
 
-部分国内 TCL 固件没有无障碍设置界面；可通过 ADB 配置 `enabled_accessibility_services` 与 `accessibility_enabled`。必须先读取并保留已有服务，只添加本应用的 `com.mihir.tvhome/com.mihir.tvhome.HomeRedirectService`，不要覆盖别人的服务配置。
-
-- 临时返回原厂：**桌面模式 → 返回原厂桌面**，会关闭本应用的自动返回偏好。
-- 紧急回退：`bash tools/restore-tcl-home.sh "$ADB_SERIAL"`。脚本调用受 DUMP 权限保护的恢复入口，关闭 Home 自动返回并打开原 TCL 桌面，随后核对前台组件。不删除 APK 或应用数据。此固件会拒绝 ADB 的 pm enable/disable，所以回退不依赖它们。
-- 回退后再使用：打开 TV Home，重新选择 **桌面模式 → 启用 Home 返回**。
+回退脚本需要先编译 `tools/legacy-home/build.sh`，或用 `HELPER_JAR` 指定已有 helper。恢复原厂桌面与恢复广告服务是独立操作。
 
 ## 验证与定制
 
-[验证记录](docs/tcl55d6-validation.md) 区分实测结果和未覆盖场景。APK 合约测试、纯 Java Home 策略测试以及实际电视上的 instrumentation 测试在 `tests/`。
+[验证记录](docs/tcl55d6-validation.md) 区分真机结果及尚未验证的场景。`tests/run.sh --device` 运行五项实际设备检查；使用 `ADB_SERIAL` 指定电视。测试 APK 也需满足电视安装策略，测试完移除测试包。
 
-Dock、隐藏应用、信源包名可在 [config.xml](launcher/res/values/config.xml) 修改后重编译。旧版 Android 的阴影绘制兼容处理在 `MainActivity.java`。后续功能优先考虑可在电视上调整 Dock / 隐藏应用，再评估第二个仓库的其他功能。
-
-仓库原有 `setup.sh`、`tools/disable.sh` 和 Google TV 精简清单来自上游，**不属于本型号的安装流程**。本分支没有验证其他电视和 Android 版本。
+Dock、隐藏应用和信源包名在 [config.xml](launcher/res/values/config.xml) 中配置。仓库原有 `setup.sh`、`tools/disable.sh` 和 Google TV 精简清单来自上游，**不属于本型号的安装流程**。
 
 ## License and credits
 
-代码遵循上游 MIT 许可，见 [LICENSE](LICENSE)。壁纸素材保留原作者和各自许可证，见 [WALLPAPER-CREDITS.md](launcher/WALLPAPER-CREDITS.md)。上游项目受到 [Gathin23/tv-vibehack](https://github.com/Gathin23/tv-vibehack) 启发。
+代码遵循上游 MIT 许可，见 [LICENSE](LICENSE)。壁纸保留原作者和各自许可证，见 [WALLPAPER-CREDITS.md](launcher/WALLPAPER-CREDITS.md)。上游项目受到 [Gathin23/tv-vibehack](https://github.com/Gathin23/tv-vibehack) 启发。

@@ -11,7 +11,8 @@
     <string name="afternoon">GOOD AFTERNOON</string>
     <string name="evening">GOOD EVENING</string>
     <string name="home_mode">Home mode</string>
-    <string name="enable_home">Enable Home return</string>
+    <string name="enable_home">Use TV Home</string>
     <string name="restore_home">Use TCL Home</string>
-    <string name="home_service_description">When enabled, TV Home opens when the TCL home screen appears. Enable the TV Home accessibility service too. It observes only the TCL home window, cannot read screen content, and leaves the original launcher installed.</string>
+    <string name="home_service_description">TV Home starts as your system Home screen. If a chooser appears, select TV Home and Always. Use TCL Home to restore the original launcher; your apps and data are kept.</string>
+    <string name="finish_install">Finish installing TV Home, then try again.</string>
 </resources>

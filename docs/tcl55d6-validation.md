@@ -1,41 +1,31 @@
-# TCL 55D6 validation — 2026-11-09
+# TCL 55D6 validation — native Home follow-up
 
-Device: TCL 55D6, chassis T962A3T04, firmware V8-A962T04-LF1V117; Android 5.1.1 / API 22 / armeabi-v7a. Read-only system properties confirmed the platform; the launcher uses no native libraries.
+Device: TCL 55D6 / T962A3T04, firmware V8-A962T04-LF1V117; Android 5.1.1 / API 22 / armeabi-v7a.
 
-## Passed on the physical television
+## Native Home evidence
 
-- Backed up original TCL Home, settings and source-picker APKs before installing the new application. Checked ZIP CRCs, compared device/local MD5, and verified the complete backup with SHA-256. Device-specific files remain private.
-- APK minimum SDK 22, ordinary app preview entry, no HOME category. Both v1-compatible signing and real installation work; APK size about 4.5 MiB.
-- Pure-Java Home redirect policy: 5 positive/negative cases including disabled preference, unrelated package, unrelated window and null inputs.
-- Device instrumentation: launch and clock; ordinary/TV app discovery without duplicates; focus preserved after unchanged and forced refresh; missing configured Dock apps filled; input menu opens. All 5 checks passed on the final APK.
-- Repeated rebuild initially crashed the vendor RenderThread in libRScpp. Removing text blur on API 22 resolved it; raised card/popup shadows are also omitted on this version. Hardware acceleration remains enabled.
-- TCL's TvInputManager exists but its backing service is null: the original call threw NullPointerException. Guarded enumeration now reaches the vendor fallback.
-- Using actual UI buttons opened the TCL settings overlay and source-picker overlay. The source manager's MAIN activity did not open its menu; its exported `com.tcl.insrc.SHOW_WINDOW` service did.
-- Launched the TCL app store from the launcher and used Home to return. The exact `com.tcl.cyberui.MainActivity` accessibility event was observed. Transition briefly shows stock Home; ADB-triggered returns took roughly 3–5 seconds, not an instant native default-home replacement.
-- UI opt-in persisted, service bound with capabilities=0 (no screen-content retrieval). No key filtering or network permission was added.
-- Recovery command invoked DUMP-protected RestoreHomeActivity, returned to the exact stock Home component, and service diagnostics confirmed `enabled=false`. Original Home remained enabled throughout. The new app was then re-enabled through its own Home mode preference.
-- Removed only our temporary instrumentation package. Restored both TCL install properties to their original empty values and verified them.
+- Packaged HOME alias and TCL metadata installed successfully with the original TV Home signing key. Installation properties restored to their exact previous values.
+- Shell helper enumerated both original TCL Home and TV Home, set native default, then verified `com.mihir.tvhome/.HomeActivity`.
+- Pressing Home resumed the new native Home activity. The accessibility service and boot receiver have been removed from the APK; only the obsolete TV Home entry was removed from secure accessibility settings.
+- Actual reboot retained native default and resumed HomeActivity; activity history contained no stock Home activity. ADB connected only late in startup, so those captures do not prove all earlier frames.
+- Recovery disabled our HOME alias while leaving the ordinary app and original TCL package available. Reenabling from the TV Home UI returned to the new desktop.
+- Advertising package hide/unhide was tested. It is now hidden for user 0; APK/ODEX are retained, no system app was uninstalled. Cached boot-ad files were backed up and device/local hashes matched. After reboot the cache directory was absent and the ad package still hidden.
+- No root, system partition modification, factory reset, firmware flash, unrelated debloating, or access to paid content.
 
-## Reboot
+## Final acceptance
 
-Passed a real `adb reboot`. After startup, `sys.boot_completed=1`, TV Home was the resumed activity, and the accessibility service was bound with `enabled=true authorized=true`. Both temporary install properties remained empty. The disabled-package list exactly matched the pre-install backup. The installed APK MD5 matched the final build delivered to the user.
+- Final APK: all 5 physical-device instrumentation checks passed (launch/clock, discovery, unchanged and forced refresh focus, empty Dock fallback, input menu). Prior ADB taps left global touch mode enabled, causing the focus test to fail before focus could be requested. Diagnostics confirmed `touchMode=true`; the test now explicitly enters remote-control mode before checking focus.
+- Final installer: backup with matching device/local APK MD5, signed upgrade, temporary property restoration and native Home selection all completed successfully. The 47 MiB original Home backup required more than 120 seconds over Wi-Fi; the pull timeout is now 600 seconds. The timed-out attempt stopped before any installation/property mutation.
+- Final recovery script: original TCL Home was verified as the selected native Home and the TV Home alias was absent from candidates. TV Home was then reenabled and selected again. Both launchers remain installed and original TCL Home remains enabled.
+- Temporary instrumentation package removed after tests.
+- Final visible reboot acceptance: the owner watched the entire final reboot and confirmed **TCL logo → TV Home directly**, with no intervening ad, red TCL loading screen or stock Home. The necessary firmware logo and Android initialization remain. No numeric startup-speed improvement is claimed because the final run was not timed with an external camera.
 
-## Platform restrictions and limits
+First-install bootstrap is packaged but the deployed TV already had the same-key first version; a clean first install is not yet validated on a separate television. Long-term reliability, firmware updates, power-loss cold start and all input/application combinations remain untested.
 
-- Firmware rejects third-party HOME declarations with `INSTALL_PARSE_FAILED_INCONSISTENT_CERTIFICATES`, including a disabled HOME alias. Same signing key and no HOME category installs successfully.
-- Firmware rejects shell `pm enable` / `pm disable-user`, including for the new user app. Recovery uses the app's own preference, not package disabling. Shell command exit code 0 alone is not proof of success.
-- No system apps removed/disabled; no root, firmware flash, factory reset or bulk settings restore.
-- Backup is not a complete firmware image and excludes private app data / DRM.
-- Test scope does not include long-term soak, every app, every HDMI input or other TCL models. No claim of removing firmware boot ads or bypassing paid content.
-- TV logcat returned no entries; native-crash investigation used read-only kernel logs and explicit instrumentation/service diagnostics.
+## Retained compatibility evidence
 
-## Reproduce
+The earlier device test passed launch/clock, app discovery without duplicates, unchanged/forced refresh focus, empty Dock fallback, and input menu (5 checks). TCL settings and signal-source overlays opened. API 22's broken text-shadow path was removed after a reproducible vendor RenderThread crash; hardware acceleration remains enabled. TvInputManager's null vendor backing service is caught and handled by the explicit source picker fallback.
 
-```bash
-bash launcher/build-and-install.sh --build
-bash tests/run.sh
-# After backing up and installing the preview on a test TV:
-ADB_SERIAL=TV_IP:5555 bash tests/run.sh --device
-```
+Backups are application/settings recovery data, not full firmware or private-app/DRM backups. The computer's backup is authoritative; do not rely on the TV's boot-video cache directory surviving a reboot. TV logcat is empty on this firmware; diagnostics use explicit state assertions and device instrumentation.
 
-Instrumentation stops the app process and may leave the accessibility service unbound on this firmware. Re-enable only TV Home's accessibility service after testing (preserve other service settings), or reboot. For ordinary use, install only the launcher APK.
+For the superseded accessibility implementation and its original validation, see commit `d90c14e` on branch `compat/tcl-55d6-android5`. Its 3–5 second Home redirection no longer describes this branch.
